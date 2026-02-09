@@ -19,3 +19,7 @@ services:
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
     App\School\Domain\SchoolRepositoryInterface: '@App\School\Infrastructure\Persistence\DoctrineSchoolRepository'
+    Meilisearch\Client:
+        arguments:
+            $url: 'http://meilisearch:7700'
+            $apiKey: 'masterKey'

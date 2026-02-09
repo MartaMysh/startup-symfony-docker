@@ -1,53 +1,94 @@
 <?php
 
-namespace App\School\Domain;
+namespace App\School\UI\Console;
 
 use App\School\Entity\School;
 use App\Service\PolishNumberParser;
 use App\Service\RomanNumerals;
 use Doctrine\ORM\EntityManagerInterface;
 use Meilisearch\Client;
+use Symfony\Component\Console\Attribute\AsCommand;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Output\OutputInterface;
 
-class SchoolMatcher
+#[AsCommand(
+    name: 'app:reindex-schools',
+    description: 'Reindexes all schools into MeiliSearch'
+)]
+class ReindexSchoolsCommand extends Command
 {
     public function __construct(
         private Client $client,
-        private EntityManagerInterface $em)
-    {
+        private EntityManagerInterface $em
+    ) {
+        parent::__construct();
     }
 
-    public function match(string $input): ?School
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $index = $this->client->index('schools');
-        $normalized = $this->normalize($input);
-        $abbr = $this->abbreviation($normalized);
-        $abbr = strlen($abbr) > 1 ? $abbr : null;
-        $keywords = $this->keywords($normalized);
 
-        $parts = [
-            $normalized
-        ];
-
-        if ($abbr) {
-            $parts[] = $abbr;
+        try {
+            $this->client->deleteIndex('schools');
+        } catch (\Exception $e) {
+            // ignorujemy jeśli nie istnieje
         }
-        $parts[] = implode(' ', $keywords);
 
-        $query = implode(' ', array_unique($parts));
-
-        dump($query);
-
-        $results = $index->search($query, [
-            'limit' => 1,
-            'matchingStrategy' => 'last',
+        $this->client->createIndex('schools', [
+            'primaryKey' => 'id'
         ]);
 
-        if (!$results->getHits()) {
-            return null;
+        $index = $this->client->index('schools');
+
+        $task = $index->updateSettings([
+            'searchableAttributes' => [
+                'officialName',
+                'normalized',
+                'abbr',
+                'keywords',
+            ],
+        ]);
+
+        $this->waitForTask($task['taskUid']);
+
+        $schools = $this->em->getRepository(School::class)->findAll();
+
+        $documents = [];
+
+        foreach ($schools as $school) {
+            $name = $school->getOfficialName();
+            $normilized = $this->normalize($name);
+            $documents[] = [
+                'id' => $school->getId(),
+                'officialName' => $name,
+                'normalized' => $this->normalize($name),
+                'abbr' => $this->abbreviation($normilized),
+                'keywords' => $this->keywords($normilized),
+            ];
         }
 
-        $id = $results->getHits()[0]['id'];
-        return $this->em->getRepository(School::class)->find($id);
+        $index->addDocuments($documents);
+
+        $output->writeln('<info>Schools reindexed successfully.</info>');
+
+        return Command::SUCCESS;
+    }
+
+    private function waitForTask(int $taskUid): void
+    {
+        while (true) {
+            $task = $this->client->getTask($taskUid);
+
+            if ($task['status'] === 'succeeded') {
+                return;
+            }
+
+            if ($task['status'] === 'failed') {
+                throw new \RuntimeException('MeiliSearch task failed: ' . json_encode($task));
+            }
+
+            usleep(100_000); // 100ms
+        }
     }
 
     private function normalize(string $str): string
@@ -101,7 +142,7 @@ class SchoolMatcher
     private function keywords(string $str): array
     {
         $str = preg_replace('/\bnr\.?\b/u', '', $str);
-        return explode(' ', $str);
+        return explode(' ', $this->normalize($str));
     }
 
     private function abbreviation(string $str): string
@@ -111,11 +152,11 @@ class SchoolMatcher
 
         // 2. remove numbers
         $str = preg_replace('/\d+/', '', $str);
+
         $str = preg_replace('/\bnr\.?\b/u', '', $str);
 
         // 3. normalize
         $words = explode(' ', $this->normalize($str));
-
         $abbr = '';
         foreach ($words as $w) {
             if ($w === '') {
@@ -123,7 +164,6 @@ class SchoolMatcher
             }
             $abbr .= mb_substr($w, 0, 1);
         }
-
         return mb_strtoupper($abbr);
     }
 
@@ -140,4 +180,5 @@ class SchoolMatcher
 
         return trim($str);
     }
+
 }

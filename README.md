@@ -54,14 +54,18 @@ docker-compose exec php composer install
 docker-compose exec php php bin/console doctrine:migrations:migrate
 
 docker-compose exec php php bin/console app:fill-schools src/School/DataFixtures/schools.xlsx
+
+docker-compose exec php php bin/console app:reindex-schools
 ```
 
 Każde polecenie powinno zakończyć się sukcesem przed przejściem do kolejnego kroku.
 
+Dla wyszukiwania po textu wybrałam Meilisearch (na ten moment nie jest na 100% od niego zadowolona - 2 szkoły nie udało się dopasować.)
+
 Dla testowania:
 
 ```bash
-# run all tests (nie zakończone - w trakcie pracy zrozumiałam że najlepsze podejście tutaj TDD, najpierw napisać test który wykonuje sie dla wszystkich danych i na bazie tego budować Matcher)
+# run all tests (nie zakończone - 2 szkoły rujnują test)
 # Oddaję kod nie zakończony.
 php bin/phpunit
 

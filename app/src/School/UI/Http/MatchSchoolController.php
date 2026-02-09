@@ -2,36 +2,35 @@
 
 namespace App\School\UI\Http;
 
-use App\School\Application\MatchSchoolService;
-use Symfony\Component\HttpFoundation\JsonResponse;
+use App\School\Domain\SchoolMatcher;
+use App\School\Entity\School;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 
-class MatchSchoolController
+class MatchSchoolController extends AbstractController
 {
     #[Route('/api/match-school', name: 'api_match_school', methods: ['POST'])]
-    public function match(Request $request, MatchSchoolService $service): JsonResponse
-    {
-        $data = json_decode($request->getContent(), true) ?? [];
-        $name = $data['name'] ?? $request->get('name');
+    public function match(
+        Request $request,
+        SchoolMatcher $matcher,
+        EntityManagerInterface $em
+    ): Response {
+        $input = $request->query->get('q');
 
-        if (!$name) {
-            return new JsonResponse(['error' => 'Missing "name"'], 400);
+        $schoolId = $matcher->match($input);
+
+        if (!$schoolId) {
+            return $this->json(['match' => null]);
         }
 
-        $school = $service->match($name);
+        $school = $em->getRepository(School::class)->find($schoolId);
 
-        if (!$school) {
-            return new JsonResponse(['match' => null], 200);
-        }
-
-        return new JsonResponse([
-            'match' => [
-                'id'           => $school->getId(),
-                'officialName' => $school->getOfficialName(),
-                'city'         => $school->getCity(),
-                'type'         => $school->getType(),
-            ],
-        ], 200);
+        return $this->json([
+            'match' => $school->getOfficialName(),
+            'id' => $school->getId(),
+        ]);
     }
 }
