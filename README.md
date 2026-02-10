@@ -62,13 +62,19 @@ Każde polecenie powinno zakończyć się sukcesem przed przejściem do kolejneg
 
 Dla wyszukiwania po textu wybrałam Meilisearch (na ten moment nie jest na 100% od niego zadowolona - 2 szkoły nie udało się dopasować.)
 
+Dla sprawdzenia działania:
+
+```bash
+docker-compose exec php php bin/console app:match-school "TM"
+
+```
+
 Dla testowania:
 
 ```bash
 # run all tests (nie zakończone - 2 szkoły rujnują test)
 # Oddaję kod nie zakończony.
 php bin/phpunit
-
 
 ```
 
